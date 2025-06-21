@@ -1,2 +1,5 @@
 .env
-.ven_project/
+venv_proj/
+__pycache__/
+*.pyc
+.idea/
