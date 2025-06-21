@@ -1,0 +1,75 @@
+Metadata-Version: 2.4
+Name: ngrok-api
+Version: 0.14.0
+Summary: ngrok HTTP API client library
+Home-page: https://github.com/ngrok/ngrok-api-python
+Author: Alan Shreve
+Author-email: alan@ngrok.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests==2.25.1
+Provides-Extra: tox
+Requires-Dist: tox==3.23.0; extra == "tox"
+Provides-Extra: doc
+Requires-Dist: black==21.5b1; extra == "doc"
+Requires-Dist: isort==5.11.5; extra == "doc"
+Requires-Dist: click==8.0.4; extra == "doc"
+Requires-Dist: furo==2022.12.7; extra == "doc"
+Requires-Dist: sphinx==6.1.3; extra == "doc"
+Requires-Dist: sphinx-autodoc-typehints==1.12.0; extra == "doc"
+Requires-Dist: sphinx-readable-theme==1.3.0; extra == "doc"
+Requires-Dist: Jinja2==3.0.3; extra == "doc"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+<!-- Code generated for API Clients. DO NOT EDIT. -->
+
+# ngrok API client library for Python
+
+This library wraps the [ngrok HTTP API](https://ngrok.com/docs/api) to make it
+easier to consume in Python.
+
+## Installation
+
+This library is published on [PyPi](https://pypi.org/project/ngrok-api/):
+
+    pip install ngrok-api
+
+## Support
+
+The best place to get support using this library is through the [ngrok Slack Community](https://ngrok.com/slack). If you find any bugs, please contribute by opening a new GitHub issue.
+
+## Documentation
+
+A quickstart guide and a full API reference are included in the [ngrok python API documentation](https://python-api.docs.ngrok.com).
+
+## Quickstart
+
+Please consult the [documentation](https://python-api.docs.ngrok.com) for additional examples.
+
+    import ngrok
+
+    # Construct the API client
+    client = ngrok.Client("<API KEY>")
+
+    # List all online tunnels
+    for t in client.tunnels.list():
+        print(t)
+
+    # Create an IP policy that allows traffic from some subnets
+    policy = client.ip_policies.create()
+    for cidr in ["24.0.0.0/8", "12.0.0.0/8"]:
+        client.ip_policy_rules.create(cidr=cidr, ip_policy_id=policy.id, action="allow")

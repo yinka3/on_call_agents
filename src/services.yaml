@@ -1,0 +1,24 @@
+services:
+  # Service #1: An expanded version of your example
+  authentication-service:
+    runbooks:
+      - name: "Restart Procedure"
+        url: "https://gist.github.com/yinka3/955fc1a1311d001b82ef1b189a540b47"
+      - name: "Password Reset Escalation"
+        url: "https://your-company.atlassian.net/wiki/spaces/SRE/pages/12345/Password-Reset-Escalation"
+    dashboards:
+      - name: "Primary Service Metrics"
+        url: "https://grafana.your-company.com/d/aBcDeFg12/authentication-service-overview"
+      - name: "Error Logs (Kibana)"
+        url: "https://logs.your-company.com/app/discover#/?_q=(query:'service.name:\"authentication-service\"')"
+
+  # Service #2: A different service for testing the dynamic lookup
+  payment-gateway:
+    runbooks:
+      - name: "Stripe API Failure Triage"
+        url: "https://github.com/your-company/internal-ops/blob/main/runbooks/payments/stripe-triage.md"
+    dashboards:
+      - name: "Transaction Health (Datadog)"
+        url: "https://app.datadoghq.com/dashboard/123-456-789/payment-gateway-health"
+      - name: "Database Performance"
+        url: "https://grafana.your-company.com/d/PgSql123/production-database-overview"
