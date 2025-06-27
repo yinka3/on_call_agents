@@ -1,0 +1,12 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  reciever: 'ai-agent'
+  group_by: ['alertname']
+
+recievers:
+- name: 'ai-agent'
+  webhook_configs:
+  - url: 'we dont know yet'
+    send_resolved: true

@@ -1,5 +1,6 @@
+import os
 import yaml
-from models import EventPayload, EventSeverity, WebhookPayload, IncidentData
+from models import EventPayload, EventSeverity, PrometheusAlert, WebhookPayload, IncidentData
 
 
 def yaml_to_dict():
@@ -105,3 +106,97 @@ def build_slack_blocks(event_payload: EventPayload) -> list:
     })
     return blocks
 
+def prome_to_event_payload(alert: PrometheusAlert):
+    
+    severity = alert.labels.get('severity', EventSeverity.INFO)
+    summary = alert.annotations.get('summary', 'No summary provided')
+    source = alert.labels.get('service', 'unknown-service')
+
+    return EventPayload(id=alert.labels.get('alertname'),
+                        summary=summary,
+                        severity=severity,
+                        source=source,
+                        timestamp=alert.startsAt, # make sure this is a datetime
+                        component=alert.labels.get('job'),
+                        class_=alert.labels.get('alertname'))
+
+
+def check_service_yaml(
+    service_name: str,
+    file_path: str = "src/services.yaml",
+    new_runbooks: list = None,
+    new_dashboards: list = None):
+
+    data = {}
+    file_existed = os.path.exists(file_path)
+
+    if file_existed:
+        try:
+            with open(file_path, 'r') as file:
+                data = yaml.safe_load(file)
+                if data is None: # Handle empty YAML file
+                    data = {}
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML from '{file_path}': {e}")
+            return False
+        except Exception as e:
+            print(f"An unexpected error occurred while reading '{file_path}': {e}")
+            return False
+
+    if 'services' not in data or not isinstance(data['services'], dict):
+        data['services'] = {}
+
+
+    if service_name not in data['services'] or not isinstance(data['services'][service_name], dict):
+        data['services'][service_name] = {}
+
+    service_config = data['services'][service_name]
+    updated = False 
+
+    if 'runbooks' not in service_config or not isinstance(service_config['runbooks'], list):
+        service_config['runbooks'] = []
+        updated = True
+
+    if new_runbooks:
+        for new_rb in new_runbooks:
+            found = False
+            for existing_rb in service_config['runbooks']:
+                if existing_rb.get('name') == new_rb.get('name') and \
+                   existing_rb.get('url') == new_rb.get('url'):
+                    found = True
+                    break
+            if not found:
+                service_config['runbooks'].append(new_rb)
+                updated = True
+                print(f"Added runbook: {new_rb.get('name')} to service '{service_name}'")
+
+    if 'dashboards' not in service_config or not isinstance(service_config['dashboards'], list):
+        service_config['dashboards'] = []
+        updated = True
+
+    if new_dashboards:
+        for new_db in new_dashboards:
+            found = False
+            for existing_db in service_config['dashboards']:
+                if existing_db.get('name') == new_db.get('name') and \
+                   existing_db.get('url') == new_db.get('url'):
+                    found = True
+                    break
+            if not found:
+                service_config['dashboards'].append(new_db)
+                updated = True
+                print(f"Added dashboard: {new_db.get('name')} to service '{service_name}'")
+
+    # Write back to file only if changes were made
+    if updated or not file_existed: # If file didn't exist, we created structure, so write it
+        try:
+            with open(file_path, 'w') as file:
+                yaml.dump(data, file, default_flow_style=False, sort_keys=False, indent=2)
+            print(f"File '{file_path}' {'updated' if updated else 'created'} successfully.")
+            return True
+        except Exception as e:
+            print(f"Error writing to YAML file '{file_path}': {e}")
+            return False
+    else:
+        print(f"No changes needed for file '{file_path}'.")
+        return True

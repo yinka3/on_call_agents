@@ -60,7 +60,29 @@ class EventRequest(BaseModel):
         kwargs.setdefault('exclude_none', True)
         return super().model_dump(*args, **kwargs)
 
-# ----------------------------------------Webhook Payloads--------------------------------------------
+# -------------------------------------Promethesues-----------------------------------------------------------
+
+class PrometheusAlert(BaseModel):
+    status: str
+    labels: Dict[str, str]
+    annotations: Dict[str, str]
+    startsAt: str
+    endsAt: str
+    generatorURL: str
+
+class PrometheusWebhookPayload(BaseModel):
+    version: str
+    groupKey: str
+    truncatedAlerts: int
+    status: str
+    receiver: str
+    groupLabels: Dict[str, str]
+    commonLabels: Dict[str, str]
+    commonAnnotations: Dict[str, str]
+    externalURL: str
+    alerts: List[PrometheusAlert]
+
+# ----------------------------------------Pager Webhook Payloads--------------------------------------------
 class WebhookEventType(str, Enum):
     INCIDENT_TRIGGERED = "incident.triggered"
     INCIDENT_ACKNOWLEDGED = "incident.acknowledged"

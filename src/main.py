@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import logging
 from collections import deque
@@ -13,7 +14,7 @@ from google import genai
 from google.genai import types
 import redis
 import models
-from utils import build_slack_blocks, format_event_payload, webhook_to_event_payload, yaml_to_dict
+from utils import build_slack_blocks, format_event_payload, prome_to_event_payload, webhook_to_event_payload, yaml_to_dict
 
 load_dotenv()
 
@@ -34,6 +35,7 @@ redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=T
 # )
 
 model_response_history = []
+
 
 def get_incident_id(payload: models.WebhookPayload):
 
@@ -70,6 +72,27 @@ def send_slack_alert(payload: models.WebhookPayload):
     except SlackApiError as e:
         assert e.response["error"]
         logging.error(e.response)
+
+history = [] # should be a database
+
+def add_to_alert_history(payload: models.PrometheusAlert):
+
+    start = datetime.fromisoformat(payload.startsAt.replace('Z', '+00:00'))
+    end = datetime.fromisoformat(payload.endsAt.replace('Z', '+00:00'))
+    prome_event = models.PrometheusAlert(status=payload.status, labels=payload.labels, annotations=payload.annotations, startsAt=start, endsAt=end, generatorURL=payload.generatorURL)
+    history.append(prome_event)
+
+
+
+@app.post('/webhook/prome')
+async def promethues_webhook(payload: models.PrometheusWebhookPayload, background_tasks: BackgroundTasks):
+
+    for alert in payload.alerts:
+        event_payload = prome_to_event_payload(alert)
+        background_tasks.add_task(add_to_alert_history, alert)
+        # send it to our AI pipeline
+    
+    return {"status": "recieved", "code": 200}
 
 @app.post('/webhook')
 async def webhook_listener(payload: models.WebhookPayload,
