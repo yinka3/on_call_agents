@@ -1,6 +1,7 @@
+from datetime import datetime
 import os
 import yaml
-from models import EventPayload, EventSeverity, PrometheusAlert, PrometheusWebhookPayload, WebhookPayload, IncidentData
+from models import EventPayload, EventSeverity, PrometheusAlert, PrometheusWebhookPayload
 
 
 def yaml_to_dict():
@@ -11,22 +12,22 @@ def yaml_to_dict():
     yaml_dict = yaml.safe_load(file)
     return yaml_dict
 
-def webhook_to_event_payload(payload: WebhookPayload):
+# def webhook_to_event_payload(payload: WebhookPayload):
 
-    event_data = payload.event.data
+#     event_data = payload.event.data
 
-    if isinstance(event_data, IncidentData):
-        severity = getattr(event_data, 'severity', EventSeverity.INFO)
+#     if isinstance(event_data, IncidentData):
+#         severity = getattr(event_data, 'severity', EventSeverity.INFO)
 
-        event_payload = EventPayload(
-            id=str(event_data.id),
-            summary=event_data.title,
-            severity=severity,
-            source=event_data.service.summary,
-            timestamp=payload.event.occurred_at)
+#         event_payload = EventPayload(
+#             id=str(event_data.id),
+#             summary=event_data.title,
+#             severity=severity,
+#             source=event_data.service.summary,
+#             timestamp=payload.event.occurred_at)
 
-        return event_payload
-    return None
+#         return event_payload
+#     return None
 
 def format_event_payload(event_payload: EventPayload) -> str:
     return (f"Incident: {event_payload.summary}, Severity: {event_payload.severity.value}, "
@@ -107,25 +108,55 @@ def build_slack_blocks(event_payload: EventPayload) -> list:
     return blocks
 
 def build_initial_message(event_payload: PrometheusWebhookPayload):
-
     status = event_payload.status
 
     if status == "resolved":
-        return [{"type": "header", "text": {"Issue is Resolved"}}]
-    
-    block = [
-        {"type": "header", "text": {"type": "plain_text", "text": f"{len(event_payload.alerts)} Prometheus Alert(s): 🔥{status}🔥", "emoji": True}},
-        {"type": "divider"},
-        {"type": "context", "elements": [{
-            "type": "mrkdwn", "text": f"Here are some relavant groupLabels: {event_payload.groupLabels}"
+        return [{
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"✅ Issue Resolved: {event_payload.groupLabels.get('alertname')}",
+                "emoji": True
+            }
+        }]
+
+    group_labels_str = str(event_payload.groupLabels)
+    common_labels_str = str(event_payload.commonLabels)
+    common_annotations_str = str(event_payload.commonAnnotations)
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"🔥 {len(event_payload.alerts)} Prometheus Alert(s): Firing",
+                "emoji": True
+            }
         },
-        {"type": "mrkdwn", "text": f"Here are some commonLables: {event_payload.commonLabels}"}]},
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": f"Here are some relevant annotations: {event_payload.commonLabels}"}]},
         {"type": "divider"},
-        {"type": "context", "text": {f"Will start working on diagnostics..."}}
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Group Labels:*\n`{group_labels_str}`"},
+                {"type": "mrkdwn", "text": f"*Common Labels:*\n`{common_labels_str}`"},
+                {"type": "mrkdwn", "text": f"*Common Annotations:*\n`{common_annotations_str}`"}
+            ]
+        },
+        {"type": "divider"},
+        {
+            # FIX: This block is now a valid context block structure.
+            # It expects an 'elements' key with a list of text/mrkdwn objects.
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "🔎 I am now investigating this alert..."
+                }
+            ]
+        }
     ]
 
-    return block
+    return blocks
 
 
 def prome_to_event_payload(alert: PrometheusAlert):
@@ -138,7 +169,7 @@ def prome_to_event_payload(alert: PrometheusAlert):
                         summary=summary,
                         severity=severity,
                         source=source,
-                        timestamp=alert.startsAt, # make sure this is a datetime
+                        timestamp=datetime.fromisoformat(alert.startsAt.replace('Z', '+00:00')), # make sure this is a datetime
                         component=alert.labels.get('job'),
                         class_=alert.labels.get('alertname'))
 

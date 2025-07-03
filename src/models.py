@@ -1,8 +1,7 @@
 from __future__ import annotations
-from typing import Optional, List, Dict, Union, Literal
+from typing import Optional, List, Dict, Union
 from datetime import datetime
-from uuid import UUID, uuid4
-from pydantic import BaseModel, Field, AnyHttpUrl, RootModel
+from pydantic import BaseModel, Field, AnyHttpUrl
 from enum import Enum
 
 #might not even need all of these
@@ -30,7 +29,7 @@ class EventImage(BaseModel):
 class EventPayload(BaseModel):
     id: str
     summary: str
-    severity: EventSeverity
+    severity: Union[EventSeverity, str]
     source: str
     timestamp: Optional[datetime] = None
     component: Optional[str] = None

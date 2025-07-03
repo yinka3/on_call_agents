@@ -1,4 +1,5 @@
 .venv_proj/
+chroma_db/
 .idea/
 .env
 __pycache__/
