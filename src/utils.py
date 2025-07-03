@@ -1,6 +1,6 @@
 import os
 import yaml
-from models import EventPayload, EventSeverity, PrometheusAlert, WebhookPayload, IncidentData
+from models import EventPayload, EventSeverity, PrometheusAlert, PrometheusWebhookPayload, WebhookPayload, IncidentData
 
 
 def yaml_to_dict():
@@ -105,6 +105,28 @@ def build_slack_blocks(event_payload: EventPayload) -> list:
         ]
     })
     return blocks
+
+def build_initial_message(event_payload: PrometheusWebhookPayload):
+
+    status = event_payload.status
+
+    if status == "resolved":
+        return [{"type": "header", "text": {"Issue is Resolved"}}]
+    
+    block = [
+        {"type": "header", "text": {"type": "plain_text", "text": f"{len(event_payload.alerts)} Prometheus Alert(s): 🔥{status}🔥", "emoji": True}},
+        {"type": "divider"},
+        {"type": "context", "elements": [{
+            "type": "mrkdwn", "text": f"Here are some relavant groupLabels: {event_payload.groupLabels}"
+        },
+        {"type": "mrkdwn", "text": f"Here are some commonLables: {event_payload.commonLabels}"}]},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": f"Here are some relevant annotations: {event_payload.commonLabels}"}]},
+        {"type": "divider"},
+        {"type": "context", "text": {f"Will start working on diagnostics..."}}
+    ]
+
+    return block
+
 
 def prome_to_event_payload(alert: PrometheusAlert):
     
