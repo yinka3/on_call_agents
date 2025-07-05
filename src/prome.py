@@ -139,7 +139,6 @@ async def promethues_webhook(request: Request, background_tasks: BackgroundTasks
 
     except Exception as e:
         logging.error(f"Failed to post to Slack or start background task: {e}")
-        # Still return a 200 to Alertmanager so it doesn't keep retrying
         return {"status": "received_but_failed_downstream", "code": 200}
     
     return {"status": "received", "code": 200}
