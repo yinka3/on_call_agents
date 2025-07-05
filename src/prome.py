@@ -8,12 +8,12 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from flask import app
 from pydantic import ValidationError
 import redis
+from embedding import GeminiEmbeddingFunction
 import models
 from utils import build_initial_message
 from google import genai
 from google.genai import types
 import chromadb
-from chromadb import EmbeddingFunction
 from slack import search_slack_history, slack_client
 
 load_dotenv()
@@ -22,13 +22,6 @@ chromadb_client = chromadb.Client()
 gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 redis_client = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
 
-class GeminiEmbeddingFunction(EmbeddingFunction):
-    def __call__(self, input):
-        embedded_model = 'models/gemini-embedding-exp-03-07'
-        out = gemini.models.embed_content(model=embedded_model, contents=input, 
-                                          config=types.EmbedContentConfig(task_type="semantic_similarity"))
-
-        return out.embeddings
 
 def run_incident_workflow(id: str, payload: models.PrometheusWebhookPayload, thread_ts: str):
 

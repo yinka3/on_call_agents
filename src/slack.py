@@ -27,7 +27,10 @@ chromadb_client = chromadb.PersistentClient("./chroma_db")
 embedding_function = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
         api_key=os.environ["GEMINI_API_KEY"], task_type="RETRIEVAL_DOCUMENT")
 
-def get_or_create_chroma_db(documents_to_embed: Union[None, Any], collection_name, metadata, db_ids):
+def search_documentation(query_text, n_results: int = 3):
+    pass
+
+def get_or_create_chroma_db(documents_to_embed: Union[None, Any], collection_name: str, metadata: Union[None, Any] = None, db_ids: Union[None, Any] = None):
     collection = chromadb_client.get_or_create_collection(
         name=collection_name, 
         embedding_function=embedding_function
