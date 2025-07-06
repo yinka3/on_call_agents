@@ -1,15 +1,12 @@
 import time
 import os
 import logging
-from typing import Any, Dict, List, Union
-import chromadb
+from typing import Dict, List
 from slack_sdk import WebClient
 from slack_bolt import App
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
-from google import genai
-import redis
-from chromadb.utils import embedding_functions
+from chroma import chromadb_client, get_or_create_chroma_db, embedding_func
 load_dotenv()
 
 SECRET_TOKEN = os.environ["SECRET_TOKEN"]
@@ -21,32 +18,6 @@ slack_app = App(token=SLACK_TOKEN, signing_secret=SIGN_IN_SECRET)
 slack_client = WebClient(token=SLACK_TOKEN)
 
 logging.basicConfig(level=logging.INFO)
-
-gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-chromadb_client = chromadb.PersistentClient("./chroma_db")
-embedding_function = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
-        api_key=os.environ["GEMINI_API_KEY"], task_type="RETRIEVAL_DOCUMENT")
-
-def search_documentation(query_text, n_results: int = 3):
-    pass
-
-def get_or_create_chroma_db(documents_to_embed: Union[None, Any], collection_name: str, metadata: Union[None, Any] = None, db_ids: Union[None, Any] = None, embed_function = embedding_function):
-    collection = chromadb_client.get_or_create_collection(
-        name=collection_name, 
-        embedding_function=embed_function
-    )
-
-    if not documents_to_embed:
-        logging.warning("No documents provided to embed.")
-        return collection
-
-    collection.upsert(
-        documents=documents_to_embed,
-        metadatas=metadata,
-        ids=db_ids
-    )
-    
-    return collection
 
 def format_document_text(message_data: Dict) -> str:
     """
@@ -107,7 +78,6 @@ def format_slack_message_history(channel_name: str):
                         "replies": ""
                     })
 
-            # Check if there are more pages of messages to fetch
             if history.data.get("has_more"):
                 cursor = history.data["response_metadata"]["next_cursor"]
                 time.sleep(1)
@@ -141,7 +111,7 @@ def search_slack_history(query_text: str, n_results: int = 3):
     try:
         slack_collection = chromadb_client.get_collection(
             name="slack_messages",
-            embedding_function=embedding_function 
+            embedding_function=embedding_func 
         )
 
         results = slack_collection.query(
@@ -152,14 +122,12 @@ def search_slack_history(query_text: str, n_results: int = 3):
         formatted_results = []
         metadatas = results.get('metadatas', [[]])[0]
 
-        for i, meta in enumerate(metadatas):
+        for meta in metadatas:
 
             user = meta.get('user', 'unknown_user')
             
-            # The 'text' in the metadata is the original parent message
             original_message = meta.get('text', 'Could not retrieve message text.') 
             
-            # You could add a permalink here in the future if you store it
             formatted_results.append(f"• *From User {user}:* \"{original_message}\"")
 
         return formatted_results

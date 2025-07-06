@@ -1,21 +1,18 @@
 import logging
 from typing import Any, Dict, List
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks
-import os
 import re
 import redis
-import chromadb
-from slack import slack_client, get_or_create_chroma_db
 from markdown import markdown
 from bs4 import BeautifulSoup, ResultSet
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from chroma import chromadb_client, embedding_func, get_or_create_chroma_db
 
-
+load_dotenv()
 app = FastAPI()
 redis_client = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
-chromadb_client = chromadb.Client()
-
 
 def parse_md(file_content: bytes):
     content_str = file_content.decode()
@@ -57,7 +54,8 @@ def chuck_it_markdown(contents: List[Dict], max_chuck_size: int = 512, chunk_ove
                     'metadata': {
                         'header_level': content['header_level'],
                         'header_text': content['header_text'],
-                        "preview": sub[:snippet]
+                        "preview": sub[:snippet],
+                        "type": "markdown"
                     },
                     'text': sub
                 })
@@ -66,7 +64,8 @@ def chuck_it_markdown(contents: List[Dict], max_chuck_size: int = 512, chunk_ove
                 'metadata': {
                     'header_level': content['header_level'],
                     'header_text': content['header_text'],
-                    "preview": content["content"][:snippet]
+                    "preview": content["content"][:snippet],
+                    "type": "markdown"
                 },
                 'text': content['content']
             })
@@ -86,20 +85,49 @@ def chuck_it_pdf(content: PdfReader, max_chuck_size = 1024, chunk_overlap = 120,
                         "text": sub,
                         "metadata" : {
                             "preview": sub[:snippet],
-                            "page_num": i + 1
+                            "page_num": i + 1,
+                            "type": "pdf"
                         }
                     })
         else:
             texts.append({
                 "metadata": {
                     "page_num": i + 1,
-                    "preview": page.extract_text()[:snippet]
+                    "preview": page.extract_text()[:snippet],
+                    "type": "pdf"
                 },
                 "text": page.extract_text()
             })
 
     return texts
 
+def search_documentation(query_text, n_results: int = 3):
+    
+    try:
+        collection = chromadb_client.get_collection("client_documentation", embedding_function=embedding_func)
+
+        queries = collection.query(
+            query_texts=[query_text],
+            n_results=n_results
+        )
+
+        formatted_results = []
+        metadatas = queries.get('metadatas', [[]])[0]
+
+        for meta in metadatas:
+            if meta.get("type") == "markdown":
+                header = meta.get("header_text", "No header text")
+                snippet = meta.get("preview", "There is no text")
+                formatted_results.append(f"From header {header}, here is a snippet: \"{snippet}\"")
+            elif meta.get("type") == "pdf":
+                page_num = meta.get("page_num")
+                snippet = meta.get("preview", "There is no text")
+                formatted_results.append(f"From page {page_num}, here is a snippet: \"{snippet}\"")
+
+        return formatted_results
+    except Exception as e:
+        logging.error(f"Failed to query ChromaDB collection 'client_documentation': {e}")
+        return []
 
 def run_workflow(filename, filecontent, doc_type):
     chunks = None
@@ -134,7 +162,6 @@ def run_workflow(filename, filecontent, doc_type):
             logging.error(f"Failed to store chunks for {filename} in ChromaDB: {e}")
 
 
-    # searching into database next
 @app.post("/upload_doc")
 async def upload_document(file: UploadFile, background: BackgroundTasks):
 

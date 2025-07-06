@@ -4,6 +4,8 @@ import yaml
 from models import EventPayload, EventSeverity, PrometheusAlert, PrometheusWebhookPayload
 
 
+
+
 def yaml_to_dict():
     file = None
     with open("services.yaml") as f:

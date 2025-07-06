@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from typing import Optional
 from uuid import uuid4
 from dotenv import load_dotenv
@@ -8,20 +7,15 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from flask import app
 from pydantic import ValidationError
 import redis
-from embedding import GeminiEmbeddingFunction
+from documentation import search_documentation
+from gemini import GeminiEmbeddingFunction, gemini
 import models
 from utils import build_initial_message
-from google import genai
-from google.genai import types
-import chromadb
 from slack import search_slack_history, slack_client
 
 load_dotenv()
 app = FastAPI()
-chromadb_client = chromadb.Client()
-gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 redis_client = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
-
 
 def run_incident_workflow(id: str, payload: models.PrometheusWebhookPayload, thread_ts: str):
 
@@ -41,15 +35,18 @@ def run_incident_workflow(id: str, payload: models.PrometheusWebhookPayload, thr
 
     llm_response = summary["llm_response"]
     slack_client.chat_postMessage(channel="#test-on-call", text=f"AI Summary: {llm_response}", thread_ts=thread_ts)
+    doc_results = search_documentation(query_text=llm_response)
     slack_results = search_slack_history(query_text=llm_response)
+    summary["doc_results"] = doc_results
     summary["slack_results"] = slack_results
+    slack_client.chat_postMessage(channel="#test-on-call", text=f"Found related info in documentation:\n{doc_results}", thread_ts=thread_ts)
     slack_client.chat_postMessage(channel="#test-on-call", text=f"Found related conversations:\n{slack_results}", thread_ts=thread_ts)
 
 
 # gets context, gets llm response and then embeds it and stores it, this should definitely go into a redis db
 def summary_on_alerts(payload_id: Optional[str]):
     
-    alerts_fingerprints = redis_client.smembers(f"payload:{payload_id}")
+    alerts_fingerprints = redis_client.smembers(f"Payload:{payload_id}")
     if not alerts_fingerprints:
         return
 
@@ -79,7 +76,6 @@ def summary_on_alerts(payload_id: Optional[str]):
 
     llm_response = get_hallucinated_context(llm_context)
     get_embeddings = GeminiEmbeddingFunction(llm_response)
-    # redis_client.hset(key=f"Payload:{payload_id}", value={"llm_context": llm_context, "llm_response": llm_response, "embeddings": get_embeddings})
     return {"llm_context": llm_context, "llm_response": llm_response, "embeddings": get_embeddings}
 
 
@@ -93,41 +89,26 @@ def get_hallucinated_context(context):
 @app.post('/webhook/prome')
 async def promethues_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
-        # Step 1: Get the raw JSON body from the request.
         payload_json = await request.json()
-        
-        # Step 2: Manually validate the JSON against our Pydantic model.
-        # If this fails, the 'except' block will catch it.
         payload = models.PrometheusWebhookPayload.model_validate(payload_json)
 
     except ValidationError as e:
-        # Step 3 (Failure): If validation fails, log the exact payload that caused the error.
         logging.error(f"Pydantic Validation Error: {e.errors()}")
         logging.error(f"--- FAILING PAYLOAD ---")
         logging.error(json.dumps(payload_json, indent=2))
         logging.error(f"-----------------------")
-        # Return a clear error response.
         raise HTTPException(
             status_code=422,
             detail={"error": "Pydantic validation failed", "details": e.errors()}
         )
-    except json.JSONDecodeError:
-        # Handle cases where the request body isn't even valid JSON.
-        body_bytes = await request.body()
-        logging.error(f"Invalid JSON received: {body_bytes.decode()}")
-        raise HTTPException(status_code=400, detail="Invalid JSON format.")
-
-    # --- If validation succeeds, the original workflow continues ---
-    initial_message = build_initial_message(payload)
-    
+    initial_message = build_initial_message(payload)    
     try:
         response = slack_client.chat_postMessage(
             channel="#test-on-call", 
             blocks=initial_message
         )
         thread_ts = response["message"]["ts"]
-        
-        # Start the background task for deeper analysis
+
         background_tasks.add_task(run_incident_workflow, str(uuid4()), payload, thread_ts)
 
     except Exception as e:
