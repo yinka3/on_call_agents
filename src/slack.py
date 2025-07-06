@@ -30,10 +30,10 @@ embedding_function = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
 def search_documentation(query_text, n_results: int = 3):
     pass
 
-def get_or_create_chroma_db(documents_to_embed: Union[None, Any], collection_name: str, metadata: Union[None, Any] = None, db_ids: Union[None, Any] = None):
+def get_or_create_chroma_db(documents_to_embed: Union[None, Any], collection_name: str, metadata: Union[None, Any] = None, db_ids: Union[None, Any] = None, embed_function = embedding_function):
     collection = chromadb_client.get_or_create_collection(
         name=collection_name, 
-        embedding_function=embedding_function
+        embedding_function=embed_function
     )
 
     if not documents_to_embed:
