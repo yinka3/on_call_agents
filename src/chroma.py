@@ -4,7 +4,6 @@ import logging
 from chromadb.utils import embedding_functions
 from typing import Any, Union
 
-chromadb_client = chromadb.Client()
 chromadb_client = chromadb.PersistentClient("./chroma_db")
 embedding_func = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
         api_key=os.environ["GEMINI_API_KEY"], task_type="RETRIEVAL_DOCUMENT")

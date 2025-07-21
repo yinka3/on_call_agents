@@ -3,9 +3,6 @@ import os
 import yaml
 from models import EventPayload, EventSeverity, PrometheusAlert, PrometheusWebhookPayload
 
-
-
-
 def yaml_to_dict():
     file = None
     with open("services.yaml") as f:
@@ -146,8 +143,6 @@ def build_initial_message(event_payload: PrometheusWebhookPayload):
         },
         {"type": "divider"},
         {
-            # FIX: This block is now a valid context block structure.
-            # It expects an 'elements' key with a list of text/mrkdwn objects.
             "type": "context",
             "elements": [
                 {

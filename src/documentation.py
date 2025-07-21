@@ -8,7 +8,8 @@ from markdown import markdown
 from bs4 import BeautifulSoup, ResultSet
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from chroma import chromadb_client, embedding_func, get_or_create_chroma_db
+from chroma import chromadb_client, get_or_create_chroma_db
+from gemini import GeminiEmbeddingFunction
 
 load_dotenv()
 app = FastAPI()
@@ -102,9 +103,9 @@ def chuck_it_pdf(content: PdfReader, max_chuck_size = 1024, chunk_overlap = 120,
     return texts
 
 def search_documentation(query_text, n_results: int = 3):
-    
+    query_embedding_func = GeminiEmbeddingFunction(task_type="retrieval_query")
     try:
-        collection = chromadb_client.get_collection("client_documentation", embedding_function=embedding_func)
+        collection = chromadb_client.get_collection("client_documentation", embedding_function=query_embedding_func)
 
         queries = collection.query(
             query_texts=[query_text],

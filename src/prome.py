@@ -17,36 +17,88 @@ load_dotenv()
 app = FastAPI()
 redis_client = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
 
-def run_incident_workflow(id: str, payload: models.PrometheusWebhookPayload, thread_ts: str):
 
+def store_prometheus_alerts(incident_id: str, payload: models.PrometheusWebhookPayload) -> None:
+    """Saves incoming Prometheus alerts to Redis."""
     alert_fingerprints = []
     for alert in payload.alerts:
         alert_fingerprints.append(alert.fingerprint)
-        redis_client.set(f"prometheus:alert:{alert.fingerprint}", alert.model_dump_json(indent=2), ex=7200)
-    
+        redis_client.set(
+            f"prometheus:alert:{alert.fingerprint}",
+            alert.model_dump_json(indent=2),
+            ex=7200
+        )
+
     if alert_fingerprints:
-        redis_client.sadd(f"payload:{id}", *alert_fingerprints)
-        redis_client.expire(f"payload:{id}", 7200)
-    redis_client.set(f"incident:{id}:thread_ts", thread_ts)
-    summary = summary_on_alerts(id)
-    if not summary or not summary.get("llm_response"):
+        redis_client.sadd(f"payload:{incident_id}", *alert_fingerprints)
+        redis_client.expire(f"payload:{incident_id}", 7200)
+
+def find_related_information(query: str) -> dict:
+    """Searches documentation and Slack for context related to a query."""
+    doc_results = search_documentation(query_text=query)
+    slack_results = search_slack_history(query_text=query)
+    return {
+        "documentation": doc_results,
+        "slack_history": slack_results
+    }
+
+def post_slack_update(channel: str, thread_ts: str, text: str):
+    """Posts a message to a specific Slack thread."""
+    try:
+        slack_client.chat_postMessage(
+            channel=channel,
+            text=text,
+            thread_ts=thread_ts
+        )
+    except Exception as e:
+        logging.error(f"Failed to post update to Slack: {e}")
+
+def run_incident_workflow(incident_id: str, payload: models.PrometheusWebhookPayload, thread_ts: str):
+    """
+    Orchestrates the entire incident response workflow.
+    """
+
+    store_prometheus_alerts(incident_id, payload)
+
+    summary_data = summarize_alerts(incident_id)
+    if not summary_data or not summary_data.get("llm_response"):
         logging.error("Failed to generate AI summary. Aborting workflow.")
+        post_slack_update(
+            channel="#test-on-call",
+            thread_ts=thread_ts,
+            text="⚠️ I was unable to generate an AI summary for this alert."
+        )
         return
 
-    llm_response = summary["llm_response"]
-    slack_client.chat_postMessage(channel="#test-on-call", text=f"AI Summary: {llm_response}", thread_ts=thread_ts)
-    doc_results = search_documentation(query_text=llm_response)
-    slack_results = search_slack_history(query_text=llm_response)
-    summary["doc_results"] = doc_results
-    summary["slack_results"] = slack_results
-    slack_client.chat_postMessage(channel="#test-on-call", text=f"Found related info in documentation:\n{doc_results}", thread_ts=thread_ts)
-    slack_client.chat_postMessage(channel="#test-on-call", text=f"Found related conversations:\n{slack_results}", thread_ts=thread_ts)
+    ai_summary = summary_data["llm_response"]
+    post_slack_update(
+        channel="#test-on-call",
+        thread_ts=thread_ts,
+        text=f"🔍 *AI Summary:* {ai_summary}"
+    )
 
+    # 3. Find and post related information
+    related_info = find_related_information(ai_summary)
+    doc_results = related_info["documentation"]
+    slack_results = related_info["slack_history"]
 
-# gets context, gets llm response and then embeds it and stores it, this should definitely go into a redis db
+    if doc_results:
+        post_slack_update(
+            channel="#test-on-call",
+            thread_ts=thread_ts,
+            text=f"📚 *Related Documentation:*\n{doc_results}"
+        )
+
+    if slack_results:
+        post_slack_update(
+            channel="#test-on-call",
+            thread_ts=thread_ts,
+            text=f"💬 *Related Conversations:*\n{slack_results}"
+        )
+
 def summary_on_alerts(payload_id: Optional[str]):
     
-    alerts_fingerprints = redis_client.smembers(f"Payload:{payload_id}")
+    alerts_fingerprints = redis_client.smembers(f"payload:{payload_id}")
     if not alerts_fingerprints:
         return
 
@@ -74,12 +126,12 @@ def summary_on_alerts(payload_id: Optional[str]):
         llm_context += f"Description: {description}\n\n"
         llm_context += f"Instance: {server}\n\n"
 
-    llm_response = get_hallucinated_context(llm_context)
+    llm_response = summarize_alerts(llm_context)
     get_embeddings = GeminiEmbeddingFunction(llm_response)
     return {"llm_context": llm_context, "llm_response": llm_response, "embeddings": get_embeddings}
 
 
-def get_hallucinated_context(context):
+def summarize_alerts(context):
     if not context:
         raise ValueError("There should be some context available")
     
@@ -117,10 +169,3 @@ async def promethues_webhook(request: Request, background_tasks: BackgroundTasks
     
     return {"status": "received", "code": 200}
 
-
-# Technically first thing would be to send an immediate alert to slack about issue
-# First thing is using this context to search messages in slack channels to get some more context or see if a situation like this happened (STATE 1)
-# Then look into documentation (STATE 2)
-# Then get relevant runbooks/dashbooks to send back (STATE 3)
-# Look into alertmanager alerting rules (STATE 4)
-# send back to engineer all recordings for the alert(s) (after the initial message for just alerting a new alert came in)
