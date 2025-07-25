@@ -4,7 +4,6 @@ from typing import Optional
 from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from flask import app
 from pydantic import ValidationError
 import redis
 from documentation import search_documentation
@@ -146,9 +145,7 @@ async def promethues_webhook(request: Request, background_tasks: BackgroundTasks
 
     except ValidationError as e:
         logging.error(f"Pydantic Validation Error: {e.errors()}")
-        logging.error(f"--- FAILING PAYLOAD ---")
         logging.error(json.dumps(payload_json, indent=2))
-        logging.error(f"-----------------------")
         raise HTTPException(
             status_code=422,
             detail={"error": "Pydantic validation failed", "details": e.errors()}
